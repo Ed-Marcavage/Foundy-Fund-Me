@@ -33,6 +33,11 @@ contract Raffle is VRFConsumerBaseV2 {
     error Raffle__CurrentRaffleHasExpired();
     error Raffle__failedToSendPrize();
     error Raffle__CurrentRaffleIsCalculating();
+    error Raffle__UpKeepNotNeeded(
+        uint256 balance,
+        uint256 players,
+        uint256 state
+    );
 
     // TYPES //
     enum RaffleState {
@@ -88,13 +93,34 @@ contract Raffle is VRFConsumerBaseV2 {
         emit EnteredRaffle(msg.sender);
     }
 
-    function pickWinner() external {
-        if ((block.timestamp - s_lastTimeStamp) < i_interval) {
-            revert Raffle__CurrentRaffleHasExpired();
+    function checkUpkeep(
+        bytes memory /* checkData */
+    ) public view returns (bool upkeepNeeded, bytes memory /* performData */) {
+        bool timeHasPassed = (block.timestamp - s_lastTimeStamp) >= i_interval;
+        bool raffleIsOpen = s_raffleState == RaffleState.OPEN;
+        bool hasBalance = address(this).balance > 0;
+        bool hasPlayers = s_players.length > 0;
+        upkeepNeeded =
+            timeHasPassed &&
+            raffleIsOpen &&
+            hasBalance &&
+            hasPlayers;
+
+        return (upkeepNeeded, "0x0");
+    }
+
+    function performUpkeep(bytes calldata /* performData */) external {
+        (bool upkeepNeeded, ) = checkUpkeep("");
+        if (!upkeepNeeded) {
+            revert Raffle__UpKeepNotNeeded(
+                address(this).balance,
+                s_players.length,
+                uint256(s_raffleState)
+            );
         }
 
         s_raffleState = RaffleState.CALCULATING;
-        uint256 requestId = i_VrfCoordinator.requestRandomWords(
+        i_VrfCoordinator.requestRandomWords(
             i_gasLane,
             i_subScriptionId,
             REQUEST_CONFIRMATIONS,
@@ -104,7 +130,7 @@ contract Raffle is VRFConsumerBaseV2 {
     }
 
     function fulfillRandomWords(
-        uint256 requestId,
+        uint256 /*requestId*/,
         uint256[] memory randomWords
     ) internal override {
         uint256 winnerIndex = randomWords[0] % s_players.length;
