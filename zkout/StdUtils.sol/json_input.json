@@ -29,8 +29,12 @@
   "settings": {
     "remappings": [
       "@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts/",
+      "@solmate/=lib/solmate/src/",
       "chainlink-brownie-contracts/=lib/chainlink-brownie-contracts/",
-      "forge-std/=lib/forge-std/src/"
+      "ds-test/=lib/solmate/lib/ds-test/src/",
+      "forge-std/=lib/forge-std/src/",
+      "foundry-devops/=lib/foundry-devops/",
+      "solmate/=lib/solmate/src/"
     ],
     "optimizer": {
       "enabled": true,
