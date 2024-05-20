@@ -15,7 +15,8 @@ contract DeployRaffle is Script {
             address VrfCoordinator,
             bytes32 gasLane,
             uint64 subscriptionId,
-            uint32 callbackGasLimit
+            uint32 callbackGasLimit,
+            address link
         ) = helperConfig.activeConfig();
 
         if (subscriptionId == 0) {
@@ -23,6 +24,8 @@ contract DeployRaffle is Script {
             subscriptionId = createSubscription.createSubscription(
                 VrfCoordinator
             );
+
+            // Fund the subscription
         }
 
         vm.startBroadcast();
