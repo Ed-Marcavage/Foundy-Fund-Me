@@ -5,6 +5,7 @@ import {Test, console} from "forge-std/Test.sol";
 import {Raffle} from "../../src/Raffle.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {DeployRaffle} from "../../script/DeployRaffle.s.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 contract RaffleTest is Test {
     // EVENTS //
@@ -128,8 +129,43 @@ contract RaffleTest is Test {
         raffle.enterRaffle{value: entranceFee}();
         vm.warp(block.timestamp + interval + 1); //Sets block.timestamp
         vm.roll(block.number + 1); //Sets block.number.
-
-        vm.expectRevert(Raffle.Raffle__UpKeepNotNeeded.selector);
         raffle.performUpkeep("0x0");
+    }
+
+    function testPreformUpKeepRevertsIfCheckUpKeepisFalse() public {
+        uint256 currentBalance = 0;
+        uint256 playerCount = 0;
+        uint256 raffleState = uint256(Raffle.RaffleState.OPEN);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Raffle.Raffle__UpKeepNotNeeded.selector,
+                currentBalance,
+                playerCount,
+                raffleState
+            )
+        );
+        raffle.performUpkeep("0x0");
+    }
+
+    modifier raffleEnteredAndTimePassed() {
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
+        vm.warp(block.timestamp + interval + 1); //Sets block.timestamp
+        vm.roll(block.number + 1); //Sets block.number.
+        _;
+    }
+
+    function testRequestedRaffleWinnerIsEmitted()
+        public
+        raffleEnteredAndTimePassed
+    {
+        vm.recordLogs(); // Tells the VM to start recording all the emitted events. To access them, use getRecordedLogs
+        raffle.performUpkeep("0x0");
+        Vm.Log[] memory log = vm.getRecordedLogs();
+        bytes32 requestId = log[1].topics[1];
+
+        Raffle.RaffleState raffleState = raffle.getRaffleState();
+        assert(raffleState == Raffle.RaffleState.CALCULATING);
+        assert(requestId > 0);
     }
 }
