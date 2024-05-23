@@ -6,6 +6,7 @@ import {Raffle} from "../../src/Raffle.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {DeployRaffle} from "../../script/DeployRaffle.s.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {VRFCoordinatorV2Mock} from "@chainlink/contracts/src/v0.8/mocks/VRFCoordinatorV2Mock.sol";
 
 contract RaffleTest is Test {
     // EVENTS //
@@ -36,7 +37,8 @@ contract RaffleTest is Test {
             gasLane,
             subscriptionId,
             callbackGasLimit,
-            link
+            link,
+
         ) = helperConfig.activeConfig();
         vm.deal(PLAYER, STARTING_BALANCE); // Sends ether to the specified address
     }
@@ -167,5 +169,61 @@ contract RaffleTest is Test {
         Raffle.RaffleState raffleState = raffle.getRaffleState();
         assert(raffleState == Raffle.RaffleState.CALCULATING);
         assert(requestId > 0);
+    }
+
+    modifier skipFork() {
+        if (block.chainid != 31337) {
+            return;
+        }
+        _;
+    }
+
+    function testFulfillRandomWords(uint256 randomRequestId) public skipFork {
+        vm.expectRevert("nonexistent request");
+        VRFCoordinatorV2Mock(VrfCoordinator).fulfillRandomWords(
+            randomRequestId,
+            address(raffle)
+        );
+    }
+
+    function testendTwoEnd() public raffleEnteredAndTimePassed skipFork {
+        // uint 256 for additional entrants and starting index
+        uint256 additionalEntrants = 5;
+        uint256 startingIndex = 1;
+        for (
+            uint256 i = startingIndex;
+            i < startingIndex + additionalEntrants;
+            i++
+        ) {
+            address player = makeAddr("player"); // or could do address(uint160(i))
+            hoax(player, STARTING_BALANCE); // hoax is prank + deal
+            raffle.enterRaffle{value: entranceFee}();
+        }
+
+        uint256 prize = entranceFee * (additionalEntrants + 1);
+        vm.recordLogs(); // Tells the VM to start recording all the emitted events. To access them, use getRecordedLogs
+        raffle.performUpkeep("0x0");
+        Vm.Log[] memory log = vm.getRecordedLogs();
+        bytes32 requestId = log[1].topics[1];
+
+        uint256 prevTimeStamp = raffle.getLastTimeStamp();
+
+        VRFCoordinatorV2Mock(VrfCoordinator).fulfillRandomWords(
+            uint256(requestId),
+            address(raffle)
+        );
+
+        assert(uint256(raffle.getRaffleState()) == 0);
+        assert(raffle.getLastTimeStamp() > prevTimeStamp);
+        assert(raffle.getRecentWinner() != address(0));
+        assert(raffle.getLengthOfPlayers() == 0);
+        console.log("STARTING_BALANCE + prize: ", STARTING_BALANCE + prize);
+        //10060000000000000000
+        console.log("Balance: ", address(raffle.getRecentWinner()).balance);
+        //10050000000000000000
+        assert(
+            address(raffle.getRecentWinner()).balance ==
+                STARTING_BALANCE + prize - entranceFee
+        );
     }
 }
